@@ -188,15 +188,24 @@ class MainWindow(QMainWindow):
         return OllamaProvider(model=model)
 
     def _refresh_models(self) -> None:
-        if self._models_worker and self._models_worker.isRunning():
-            return
+        if self._models_worker is not None:
+            try:
+                if self._models_worker.isRunning():
+                    return
+            except RuntimeError:
+                self._models_worker = None
         self.statusBar().showMessage("Checking available models...")
         provider = self._make_provider("")
-        self._models_worker = OllamaModelsWorker(provider)
-        self._models_worker.models_ready.connect(self._models_loaded)
-        self._models_worker.error.connect(self._ollama_error)
-        self._models_worker.finished.connect(self._models_worker.deleteLater)
-        self._models_worker.start()
+        worker = OllamaModelsWorker(provider)
+        self._models_worker = worker
+        worker.models_ready.connect(self._models_loaded)
+        worker.error.connect(self._ollama_error)
+        worker.finished.connect(self._models_worker_finished)
+        worker.finished.connect(worker.deleteLater)
+        worker.start()
+
+    def _models_worker_finished(self) -> None:
+        self._models_worker = None
 
     def _models_loaded(self, models: list[str]) -> None:
         current = self.model_combo.currentText()
@@ -228,8 +237,12 @@ class MainWindow(QMainWindow):
                 self, "No model selected", "Select or enter an Ollama model first."
             )
             return
-        if self._chat_worker and self._chat_worker.isRunning():
-            return
+        if self._chat_worker is not None:
+            try:
+                if self._chat_worker.isRunning():
+                    return
+            except RuntimeError:
+                self._chat_worker = None
 
         self._messages.append({"role": "user", "content": prompt})
         if self.project_root is not None:
@@ -253,11 +266,15 @@ class MainWindow(QMainWindow):
         self.send_button.setEnabled(False)
         self._current_response = ""
         self._chat_worker = worker
-        self._chat_worker.chunk.connect(self._handle_chat_chunk)
-        self._chat_worker.finished_ok.connect(self._chat_finished)
-        self._chat_worker.error.connect(self._chat_error)
-        self._chat_worker.finished.connect(self._chat_worker.deleteLater)
-        self._chat_worker.start()
+        worker.chunk.connect(self._handle_chat_chunk)
+        worker.finished_ok.connect(self._chat_finished)
+        worker.error.connect(self._chat_error)
+        worker.finished.connect(self._chat_worker_finished)
+        worker.finished.connect(worker.deleteLater)
+        worker.start()
+
+    def _chat_worker_finished(self) -> None:
+        self._chat_worker = None
 
     def _agent_messages(self, system: str) -> list[dict[str, object]]:
         return [{"role": "system", "content": system}, *self._messages]
