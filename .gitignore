@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# IDEs
+.vscode/
+.idea/
+
+# Application/runtime data
+*.log
+runtime/
+.local/
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Windows
+Thumbs.db
+Desktop.ini
