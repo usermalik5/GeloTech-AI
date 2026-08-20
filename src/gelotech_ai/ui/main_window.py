@@ -24,7 +24,11 @@ from gelotech_ai.agent import ReadOnlyAgent, make_inspect_tool, make_read_tool, 
 from gelotech_ai.core.context import build_project_context
 from gelotech_ai.core.project import ProjectFile, discover_files, read_text_file
 from gelotech_ai.models.ollama import OllamaProvider
+from gelotech_ai.models.openai_compat import DEFAULT_BASE_URL, OpenAICompatProvider
 from gelotech_ai.ui.workers import AgentChatWorker, OllamaChatWorker, OllamaModelsWorker
+
+PROVIDER_OLLAMA = "Ollama (local)"
+PROVIDER_CLOUD = "Cloud API (OpenAI-compatible)"
 
 _AGENT_SYSTEM_PROMPT = (
     "You are GeloTech AI, a read-only coding agent for the opened project. "
@@ -59,6 +63,15 @@ class MainWindow(QMainWindow):
         project_button = QPushButton("Open Project")
         project_button.clicked.connect(self._open_project)
         self.project_label = QLabel("No project opened")
+        self.provider_combo = QComboBox()
+        self.provider_combo.addItems([PROVIDER_OLLAMA, PROVIDER_CLOUD])
+        self.provider_combo.currentTextChanged.connect(self._provider_changed)
+        self.api_key_input = QLineEdit()
+        self.api_key_input.setPlaceholderText("API key (or set GELOTECH_API_KEY)")
+        self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.api_key_input.setMinimumWidth(180)
+        self.base_url_input = QLineEdit(DEFAULT_BASE_URL)
+        self.base_url_input.setMinimumWidth(200)
         self.model_combo = QComboBox()
         self.model_combo.setEditable(True)
         self.model_combo.setMinimumWidth(260)
@@ -66,10 +79,14 @@ class MainWindow(QMainWindow):
         refresh_models.clicked.connect(self._refresh_models)
         toolbar.addWidget(project_button)
         toolbar.addWidget(self.project_label, 1)
+        toolbar.addWidget(self.provider_combo)
+        toolbar.addWidget(self.api_key_input)
+        toolbar.addWidget(self.base_url_input)
         toolbar.addWidget(QLabel("Model:"))
         toolbar.addWidget(self.model_combo)
         toolbar.addWidget(refresh_models)
         root_layout.addLayout(toolbar)
+        self._provider_changed(self.provider_combo.currentText())
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
@@ -156,11 +173,25 @@ class MainWindow(QMainWindow):
             return
         self.preview.setPlainText(text)
 
+    def _provider_changed(self, provider: str) -> None:
+        is_cloud = provider == PROVIDER_CLOUD
+        self.api_key_input.setVisible(is_cloud)
+        self.base_url_input.setVisible(is_cloud)
+
+    def _make_provider(self, model: str) -> OllamaProvider | OpenAICompatProvider:
+        if self.provider_combo.currentText() == PROVIDER_CLOUD:
+            return OpenAICompatProvider(
+                base_url=self.base_url_input.text().strip() or DEFAULT_BASE_URL,
+                api_key=self.api_key_input.text().strip(),
+                model=model,
+            )
+        return OllamaProvider(model=model)
+
     def _refresh_models(self) -> None:
         if self._models_worker and self._models_worker.isRunning():
             return
-        self.statusBar().showMessage("Checking local Ollama models...")
-        provider = OllamaProvider()
+        self.statusBar().showMessage("Checking available models...")
+        provider = self._make_provider("")
         self._models_worker = OllamaModelsWorker(provider)
         self._models_worker.models_ready.connect(self._models_loaded)
         self._models_worker.error.connect(self._ollama_error)
@@ -178,10 +209,10 @@ class MainWindow(QMainWindow):
             else:
                 self.model_combo.setEditText(current)
         if models:
-            self.statusBar().showMessage(f"Ollama ready: {len(models)} local model(s).")
+            self.statusBar().showMessage(f"Provider ready: {len(models)} model(s).")
         else:
             self.statusBar().showMessage(
-                "Ollama is running but no models are installed."
+                "Provider is running but no models are available."
             )
 
     def _ollama_error(self, message: str) -> None:
@@ -208,13 +239,13 @@ class MainWindow(QMainWindow):
                 make_read_tool(self.project_root),
                 make_inspect_tool(self.project_root),
             ]
-            agent = ReadOnlyAgent(OllamaProvider(model=model), tools)
+            agent = ReadOnlyAgent(self._make_provider(model), tools)
             worker = AgentChatWorker(agent, self._agent_messages(system))
             worker.tool_used.connect(self._handle_tool_used)
         else:
             system = "You are GeloTech AI, a local coding assistant. Be precise and concise."
             worker = OllamaChatWorker(
-                OllamaProvider(model=model), self._agent_messages(system)
+                self._make_provider(model), self._agent_messages(system)
             )
         self.chat.append(f"<b>You:</b> {prompt}")
         self.chat.append("<b>GeloTech AI:</b> ")

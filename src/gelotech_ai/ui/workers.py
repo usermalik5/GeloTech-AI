@@ -5,16 +5,16 @@ import asyncio
 from PySide6.QtCore import QThread, Signal
 
 from gelotech_ai.agent.agent import ReadOnlyAgent
-from gelotech_ai.models.ollama import OllamaProvider
+from gelotech_ai.models.base import ModelProvider
 
 
 class OllamaModelsWorker(QThread):
-    """Discover local Ollama models."""
+    """Discover model names from a provider."""
 
     models_ready = Signal(list)
     error = Signal(str)
 
-    def __init__(self, provider: OllamaProvider) -> None:
+    def __init__(self, provider: ModelProvider) -> None:
         super().__init__()
         self.provider = provider
 
@@ -27,13 +27,13 @@ class OllamaModelsWorker(QThread):
 
 
 class OllamaChatWorker(QThread):
-    """Stream one chat response from Ollama."""
+    """Stream one chat response from a provider."""
 
     chunk = Signal(str)
     finished_ok = Signal()
     error = Signal(str)
 
-    def __init__(self, provider: OllamaProvider, messages: list[dict[str, str]]) -> None:
+    def __init__(self, provider: ModelProvider, messages: list[dict[str, str]]) -> None:
         super().__init__()
         self.provider = provider
         self.messages = messages

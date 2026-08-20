@@ -24,6 +24,10 @@ class AgentEvent:
 class ModelProvider(Protocol):
     """Minimal streaming interface used by the agent layer."""
 
+    async def list_models(self) -> list[str]:
+        """Return model names available from the provider."""
+        return []
+
     async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[str]:
         """Yield text chunks for a conversation."""
         yield ""

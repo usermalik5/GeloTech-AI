@@ -72,11 +72,14 @@ pip install -e ".[dev]"
 python -m gelotech_ai
 ```
 
-### Ollama
+### Model providers
 
-Install and start Ollama on Windows, then install at least one local model. GeloTech AI checks `http://127.0.0.1:11434` for installed models and streams chat through Ollama's local API.
+Two providers are built in, switchable from the toolbar:
 
-The application does not download models automatically. This keeps model selection explicit and avoids unexpected multi-gigabyte downloads.
+- **Ollama (local)** — free local models through `http://127.0.0.1:11434`.
+- **Cloud API (OpenAI-compatible)** — works with DeepSeek, OpenRouter (including `:free` models), Groq, Together, and similar services. Enter the API key in the toolbar or set the `GELOTECH_API_KEY` environment variable, then adjust the base URL and model name as needed. DeepSeek's default base URL is `https://api.deepseek.com/v1` with models like `deepseek-chat`; OpenRouter uses `https://openrouter.ai/api/v1`.
+
+Keys are never written to disk or logged. The application does not download models automatically; model selection stays explicit.
 
 ## Safety
 
