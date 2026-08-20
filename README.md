@@ -2,6 +2,22 @@
 
 A Windows-first Python desktop AI coding assistant inspired by the agent workflow of tools like OpenCode.
 
+## Current milestone: M1 — Local Project + AI Chat
+
+The first usable workspace is now implemented:
+
+- Open a local project directory
+- Browse its files from a native Qt tree
+- Preview UTF-8 text files safely
+- Skip common generated/dependency directories
+- Build a compact project file inventory for model context
+- Detect locally installed Ollama models
+- Stream responses from Ollama without freezing the GUI
+- Keep multi-turn chat history
+- Run without a cloud API key when using Ollama locally
+
+No file writes, terminal execution, or Git mutations are enabled yet. Those will be introduced behind the permission system in later milestones.
+
 ## Vision
 
 GeloTech AI is intended to be a practical, local/free-first coding workspace where an AI can understand a project, inspect files, make controlled edits, run commands, and work with Git from a native desktop GUI.
@@ -57,13 +73,21 @@ pip install -e ".[dev]"
 python -m gelotech_ai
 ```
 
+### Ollama
+
+Install and start Ollama on Windows, then install at least one local model. GeloTech AI checks `http://127.0.0.1:11434` for installed models and streams chat through Ollama's local API.
+
+The application does not download models automatically. This keeps model selection explicit and avoids unexpected multi-gigabyte downloads.
+
 ## Safety
 
 Agent permissions are a core feature. Filesystem writes, command execution, Git operations, and other potentially destructive actions should be governed by explicit permission policies. Never commit API keys, passwords, tokens, or other credentials.
 
 ## Project status
 
-**Early development / architecture stage.**
+**M1 implemented — local project browser + Ollama streaming chat.**
+
+Next planned milestone: file search, targeted file-context loading, and the first read-only agent tools.
 
 ## License
 
