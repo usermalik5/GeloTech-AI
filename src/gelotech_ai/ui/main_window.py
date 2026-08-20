@@ -36,6 +36,7 @@ class MainWindow(QMainWindow):
         self.project_root: Path | None = None
         self._files: dict[str, ProjectFile] = {}
         self._messages: list[dict[str, str]] = []
+        self._current_response = ""
         self._chat_worker: OllamaChatWorker | None = None
         self._models_worker: OllamaModelsWorker | None = None
         self._build_ui()
@@ -117,11 +118,13 @@ class MainWindow(QMainWindow):
             self._files[key] = item
             parts = item.path.parts
             parent = root_item
-            built = []
             for part in parts[:-1]:
-                built.append(part)
                 child = next(
-                    (parent.child(i) for i in range(parent.childCount()) if parent.child(i).text(0) == part),
+                    (
+                        parent.child(i)
+                        for i in range(parent.childCount())
+                        if parent.child(i).text(0) == part
+                    ),
                     None,
                 )
                 if child is None:
@@ -165,9 +168,12 @@ class MainWindow(QMainWindow):
                 self.model_combo.setCurrentIndex(index)
             else:
                 self.model_combo.setEditText(current)
-        self.statusBar().showMessage(
-            f"Ollama ready: {len(models)} local model(s)." if models else "Ollama is running but no models are installed."
-        )
+        if models:
+            self.statusBar().showMessage(f"Ollama ready: {len(models)} local model(s).")
+        else:
+            self.statusBar().showMessage(
+                "Ollama is running but no models are installed."
+            )
 
     def _ollama_error(self, message: str) -> None:
         self.statusBar().showMessage(message)
@@ -178,7 +184,9 @@ class MainWindow(QMainWindow):
         if not prompt:
             return
         if not model:
-            QMessageBox.warning(self, "No model selected", "Select or enter an Ollama model first.")
+            QMessageBox.warning(
+                self, "No model selected", "Select or enter an Ollama model first."
+            )
             return
         if self._chat_worker and self._chat_worker.isRunning():
             return
@@ -192,14 +200,22 @@ class MainWindow(QMainWindow):
         self.chat.append("<b>GeloTech AI:</b> ")
         self.prompt.clear()
         self.send_button.setEnabled(False)
+        self._current_response = ""
         self._chat_worker = OllamaChatWorker(OllamaProvider(model=model), messages)
-        self._chat_worker.chunk.connect(self.chat.insertPlainText)
+        self._chat_worker.chunk.connect(self._handle_chat_chunk)
         self._chat_worker.finished_ok.connect(self._chat_finished)
         self._chat_worker.error.connect(self._chat_error)
         self._chat_worker.finished.connect(self._chat_worker.deleteLater)
         self._chat_worker.start()
 
+    def _handle_chat_chunk(self, text: str) -> None:
+        self._current_response += text
+        self.chat.insertPlainText(text)
+        self.chat.ensureCursorVisible()
+
     def _chat_finished(self) -> None:
+        if self._current_response:
+            self._messages.append({"role": "assistant", "content": self._current_response})
         self.send_button.setEnabled(True)
         self.statusBar().showMessage("Response complete.")
 
