@@ -5,6 +5,8 @@ from collections.abc import AsyncIterator
 
 import httpx
 
+from gelotech_ai.models.base import AgentEvent, ToolCall
+
 
 class OllamaError(RuntimeError):
     """Raised when Ollama is unavailable or returns an invalid response."""
@@ -38,25 +40,74 @@ class OllamaProvider:
 
         request = {"model": self.model, "messages": messages, "stream": True}
         try:
-            async with httpx.AsyncClient(timeout=None) as client:
-                async with client.stream(
-                    "POST", f"{self.base_url}/api/chat", json=request
-                ) as response:
-                    response.raise_for_status()
-                    async for line in response.aiter_lines():
-                        if not line:
+            async with httpx.AsyncClient(timeout=None) as client, client.stream(
+                "POST", f"{self.base_url}/api/chat", json=request
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    try:
+                        payload = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if payload.get("error"):
+                        raise OllamaError(str(payload["error"]))
+                    content = payload.get("message", {}).get("content", "")
+                    if content:
+                        yield content
+                    if payload.get("done"):
+                        break
+        except OllamaError:
+            raise
+        except (httpx.HTTPError, OSError) as exc:
+            raise OllamaError(
+                "Cannot connect to Ollama. Start Ollama and try again."
+            ) from exc
+
+    async def stream_agent(
+        self, messages: list[dict[str, object]], tools: list[dict[str, object]]
+    ) -> AsyncIterator[AgentEvent]:
+        """Stream text and tool-call events from Ollama's chat endpoint."""
+        if not self.model:
+            raise OllamaError("No Ollama model is selected.")
+
+        request: dict[str, object] = {
+            "model": self.model,
+            "messages": messages,
+            "tools": tools,
+            "stream": True,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=None) as client, client.stream(
+                "POST", f"{self.base_url}/api/chat", json=request
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    try:
+                        payload = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if payload.get("error"):
+                        raise OllamaError(str(payload["error"]))
+                    message = payload.get("message", {})
+                    content = message.get("content") or ""
+                    calls: list[ToolCall] = []
+                    for raw in message.get("tool_calls") or []:
+                        if not isinstance(raw, dict):
                             continue
-                        try:
-                            payload = json.loads(line)
-                        except json.JSONDecodeError:
+                        fn = raw.get("function", {})
+                        if not isinstance(fn, dict):
                             continue
-                        if payload.get("error"):
-                            raise OllamaError(str(payload["error"]))
-                        content = payload.get("message", {}).get("content", "")
-                        if content:
-                            yield content
-                        if payload.get("done"):
-                            break
+                        arguments = fn.get("arguments", {})
+                        if not isinstance(arguments, dict):
+                            arguments = {}
+                        calls.append(ToolCall(str(fn.get("name", "")), dict(arguments)))
+                    yield AgentEvent(content=content, tool_calls=tuple(calls))
+                    if payload.get("done"):
+                        break
         except OllamaError:
             raise
         except (httpx.HTTPError, OSError) as exc:

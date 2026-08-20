@@ -2,21 +2,20 @@
 
 A Windows-first Python desktop AI coding assistant inspired by the agent workflow of tools like OpenCode.
 
-## Current milestone: M1 — Local Project + AI Chat
+## Current milestone: M2 — Read-only Agent
 
-The first usable workspace is now implemented:
+The chat is now a project-aware agent. When a project is open, the local model
+can call read-only tools before answering:
 
-- Open a local project directory
-- Browse its files from a native Qt tree
-- Preview UTF-8 text files safely
-- Skip common generated/dependency directories
-- Build a compact project file inventory for model context
-- Detect locally installed Ollama models
-- Stream responses from Ollama without freezing the GUI
-- Keep multi-turn chat history
-- Run without a cloud API key when using Ollama locally
+- `search_files` — case-insensitive regex search across project file contents
+- `read_file` — numbered line view of any text file inside the project
+- `inspect_project` — compact file inventory for model context
+- Tool requests are executed against the opened project in a worker thread so the GUI stays responsive
+- Results are fed back to the model until it answers or the round limit is hit
+- Tool usage appears inline in the chat
+- M1 features remain: project browser, safe file previews, and plain streaming chat when no project is open
 
-No file writes, terminal execution, or Git mutations are enabled yet. Those will be introduced behind the permission system in later milestones.
+Everything stays **read-only**: no file writes, terminal execution, or Git mutations yet. Those arrive in M3 behind explicit permission dialogs.
 
 ## Vision
 
@@ -85,9 +84,9 @@ Agent permissions are a core feature. Filesystem writes, command execution, Git 
 
 ## Project status
 
-**M1 implemented — local project browser + Ollama streaming chat.**
+**M2 implemented — read-only agent with `search_files`, `read_file`, and `inspect_project` tools.**
 
-Next planned milestone: file search, targeted file-context loading, and the first read-only agent tools.
+Next planned milestone: file editing behind the permission dialog system (`Allow Once` / `Always Allow` / `Deny`), then terminal and Git tools.
 
 ## License
 

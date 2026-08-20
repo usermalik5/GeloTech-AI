@@ -20,10 +20,19 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from gelotech_ai.agent import ReadOnlyAgent, make_inspect_tool, make_read_tool, make_search_tool
 from gelotech_ai.core.context import build_project_context
 from gelotech_ai.core.project import ProjectFile, discover_files, read_text_file
 from gelotech_ai.models.ollama import OllamaProvider
-from gelotech_ai.ui.workers import OllamaChatWorker, OllamaModelsWorker
+from gelotech_ai.ui.workers import AgentChatWorker, OllamaChatWorker, OllamaModelsWorker
+
+_AGENT_SYSTEM_PROMPT = (
+    "You are GeloTech AI, a read-only coding agent for the opened project. "
+    "Use the available tools to inspect the project before answering. "
+    "Cite file paths and line numbers when useful. "
+    "If a tool finds nothing or reports an error, say so. "
+    "Never invent file contents. Be precise and concise."
+)
 
 
 class MainWindow(QMainWindow):
@@ -191,22 +200,39 @@ class MainWindow(QMainWindow):
         if self._chat_worker and self._chat_worker.isRunning():
             return
 
-        system = "You are GeloTech AI, a local coding assistant. Be precise and concise."
-        if self.project_root:
-            system += "\n\n" + build_project_context(self.project_root)
         self._messages.append({"role": "user", "content": prompt})
-        messages = [{"role": "system", "content": system}, *self._messages]
+        if self.project_root is not None:
+            system = _AGENT_SYSTEM_PROMPT + "\n\n" + build_project_context(self.project_root)
+            tools = [
+                make_search_tool(self.project_root),
+                make_read_tool(self.project_root),
+                make_inspect_tool(self.project_root),
+            ]
+            agent = ReadOnlyAgent(OllamaProvider(model=model), tools)
+            worker = AgentChatWorker(agent, self._agent_messages(system))
+            worker.tool_used.connect(self._handle_tool_used)
+        else:
+            system = "You are GeloTech AI, a local coding assistant. Be precise and concise."
+            worker = OllamaChatWorker(
+                OllamaProvider(model=model), self._agent_messages(system)
+            )
         self.chat.append(f"<b>You:</b> {prompt}")
         self.chat.append("<b>GeloTech AI:</b> ")
         self.prompt.clear()
         self.send_button.setEnabled(False)
         self._current_response = ""
-        self._chat_worker = OllamaChatWorker(OllamaProvider(model=model), messages)
+        self._chat_worker = worker
         self._chat_worker.chunk.connect(self._handle_chat_chunk)
         self._chat_worker.finished_ok.connect(self._chat_finished)
         self._chat_worker.error.connect(self._chat_error)
         self._chat_worker.finished.connect(self._chat_worker.deleteLater)
         self._chat_worker.start()
+
+    def _agent_messages(self, system: str) -> list[dict[str, object]]:
+        return [{"role": "system", "content": system}, *self._messages]
+
+    def _handle_tool_used(self, name: str) -> None:
+        self.chat.append(f'<i style="color:#888">→ {name}</i>')
 
     def _handle_chat_chunk(self, text: str) -> None:
         self._current_response += text
